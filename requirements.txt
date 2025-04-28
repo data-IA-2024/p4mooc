@@ -1,0 +1,6 @@
+requests
+python-dotenv
+mistralai
+
+psycopg2-binary
+psycopg3

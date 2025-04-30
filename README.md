@@ -18,3 +18,16 @@ export en CSV
 ```bash
  docker run --name pgvector -p 5432:5432 -e POSTGRES_PASSWORD=goudot -d pgvector/pgvector:pg17
 ```
+
+## API
+```bash
+ fastapi dev main.py --port 8888
+```
+
+```bash
+ python appMongo.py
+```
+
+```bash
+ clear; python scrap.py
+```

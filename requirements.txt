@@ -5,5 +5,14 @@ mistralai
 psycopg2-binary
 
 fastapi[standard]
+strawberry-graphql[debug-server]
+#graphene
+#starlette
+#starlette-graphene3
 
 pymongo
+
+# Pour les jetons JWT
+pyjwt
+passlib[bcrypt]
+pydantic

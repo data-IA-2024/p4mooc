@@ -1,10 +1,45 @@
 import re
 from pymongo import MongoClient
+import dotenv, os
+
+dotenv.load_dotenv()  # take environment variables
 
 # Requires the PyMongo package.
 # https://api.mongodb.com/python/current
 
-client = MongoClient('mongodb://localhost:27017/?readPreference=primary&appname=MongoDB%20Compass&ssl=false')
+MONGO_URL=os.environ['MONGO_URL']
+client = MongoClient(MONGO_URL)
+db = client[os.environ["MONGO_DB"]]
+collection = db[os.environ["MONGO_COLLEC"]]
+
+
+filter={}
+project={
+    'content' : 1
+}
+
+result = collection.find(
+    filter=filter,
+    projection=project
+)
+
+def stevefunk(content):
+    children = content.get("children", [])
+    endorsed_responses = content.get('endorsed_reponses',[])
+    non_endorsed_responses = content.get('non_endorsed_reponses',[])
+    db['documents'].insert_one(content)
+    #print(f"{content.get('depth')} {content.get('courseid'):30} {content.get('username')}")
+
+    for doc in children+endorsed_responses+non_endorsed_responses:
+        stevefunk(doc)
+
+for doc in result:
+    content = doc["content"]
+    print("-" * 100)
+    stevefunk(content)
+
+quit()
+
 filter={
     'Title': re.compile(r"futur(?i)")
 }

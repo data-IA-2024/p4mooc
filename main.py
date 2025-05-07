@@ -10,13 +10,14 @@ from typing import Annotated
 
 dotenv.load_dotenv()  # take environment variables
 
-SECRET_KEY = "09d25e094f5555a2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+SECRET_KEY = os.environ['SECRET_KEY']
+ALGORITHM = os.environ['ALGORITHM']
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ['ACCESS_TOKEN_EXPIRE_MINUTES'])
 
 scopes = {
     "read": "Read access to protected resources",
-    "write": "Write access to protected resources"
+    "write": "Write access to protected resources",
+    "fail": "Scope qui n'existe pas !"
 }
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", scopes=scopes)
 
@@ -30,11 +31,17 @@ db = client[os.environ["MONGO_DB"]]
 #collection = db[os.environ["MONGO_COLLEC"]]
 
 @strawberry.type
+class User:
+    _id: str
+    username: str='---'
+    user_id: int=0
+
+@strawberry.type
 class Message:
     _id: str
     id: str
     username: str='---'
-    user_id: int=0
+    user_id: int=-1
     body: str
     type: str
     thread_type: str = ''
@@ -65,6 +72,11 @@ class Message:
     depth: int = -1
     parent_id: str = ''
 
+def get_data(token:str=Depends(oauth2_scheme)) -> dict:
+    print(f"get_data {token=}")
+    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    return payload
+
 
 def get_messages(course_id : str=None, username : str=None, id: str=None, limit:int=20):
     query={}
@@ -80,8 +92,8 @@ class Query:
     messages: typing.List[Message] = strawberry.field(resolver=get_messages)
 
     @strawberry.field
-    def protected_hello2(self, token: str = Depends(oauth2_scheme)) -> str:
-        return f"OK {token=}"
+    def protected_hello2(self, data:dict = Depends(get_data)) -> str:
+        return f"OK {data=}"
 
 @strawberry.type
 class Mutation:
@@ -100,18 +112,16 @@ app = FastAPI()
 app.include_router(graphql_app, prefix="/graphql")
 
 @app.get("/test")
-async def test(token: Annotated[str, Depends(oauth2_scheme)]):
+def test(data=Depends(get_data)):
     '''
     Test du token identifié !
     :param token:
     :return:
     '''
-    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-    print(f"/test {payload=}")
-    return {"token": token, "payload": payload}
+    return data
 
 @app.post("/token")
-async def login_for_access_token(
+def login_for_access_token(
         form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
 ) -> Token:
     '''
@@ -122,5 +132,4 @@ async def login_for_access_token(
     print(f"/token {form_data.username=} {form_data.password=} {form_data.scopes=}")
     data = {'username': form_data.username, "scope": form_data.scopes}
     access_token = jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
-    print(f"{access_token=}")
     return Token(access_token=access_token, token_type="bearer")

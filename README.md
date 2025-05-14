@@ -16,12 +16,17 @@ export en CSV
 
 ## BDD PG vector
 ```bash
- docker run --name pgvector -p 5432:5432 -e POSTGRES_PASSWORD=goudot -d pgvector/pgvector:pg17
+ docker run --name pgvector -p 5432:5432 -e POSTGRES_PASSWORD=P4SECRET -d pgvector/pgvector:pg17
 ```
 
 ## API
 ```bash
  fastapi dev main.py --port 8888
+```
+
+```bash
+ source venv/bin/activate
+ fastapi dev app.py --port 8888
 ```
 
 ```bash
@@ -38,7 +43,7 @@ export en CSV
 
 ## Mongo Users
 Sur Datalab:
-`docker run --name mongop4 -it -e MONGO_INITDB_ROOT_USERNAME=p4user -e MONGO_INITDB_ROOT_PASSWORD=P4SECRET -p 27017:27017 mongo`
+`docker run --name mongop4 -d -e MONGO_INITDB_ROOT_USERNAME=p4user -e MONGO_INITDB_ROOT_PASSWORD=P4SECRET -p 27017:27017 mongo`
 
 ```text
 # user root
@@ -95,4 +100,62 @@ Thread
       ├─ => même champs que dans content sauf title,
       ├─ depth (pas dans content)
       ├─ children / endorsed_response / non_endorsed_response (*)
+```
+
+```mermaid
+%% Example of sequence diagram
+  sequenceDiagram
+      actor User
+    User->>API : Charge le fil de discussion (id)<br>GET /thread?id=***
+    API->>+Modele : Extrait les messages du fil (id)<br>extract(id)
+    Modele->>MongoDB : récupère le document <br>db.threads.find({id:id})
+    MongoDB->>Modele: document<br>JSON du fil
+    loop chaque message du fil
+    Modele->>MongoDB : Sauve message<br>db.messages.update_one({'id':id}, {'$set': content}, upsert=True)
+    MongoDB->>Modele : status
+    Modele->>Ollama : embedding (messages)<br>POST http://localhost:11434/api/embed
+    Ollama->>Modele : result<br>Vector dans JSON
+    Modele->>PGvector : ajout (id,course_id,embedding) dans table<br>INSERT INTO public.documents ...
+    PGvector->>Modele : status
+    end
+    Modele->>-API : Nbre de messages
+    API->>User : Nbre de messages (status 200)
+```
+
+```mermaid
+%% Example of sequence diagram
+  sequenceDiagram
+
+    box lightyellow Récupération des cours disponibles
+        actor User
+        participant API
+        participant Modele
+        participant MongoDB
+        participant PGvector
+        participant Ollama
+    end
+
+    User->>API : Donne la liste des cours <br/>GET /courses
+    API->>+Modele : liste des cours<br>get_courses()
+    Modele->>MongoDB : liste des valeurs<br>db.threads.distinct('content.course_id')
+    MongoDB->>Modele : liste <br>JSON list
+    Modele->>-API : liste<br>JSON list
+    API->>User : liste cours (JSON)
+```
+
+```mermaid
+%% Example of sequence diagram
+  sequenceDiagram
+
+    box lightyellow Je pose une question
+        actor User
+        participant API
+        participant Modele
+        participant MongoDB
+        participant PGvector
+        participant Ollama
+    end
+
+    User->>API : fil similaire (question, course_id) 
+    API->>User : Liste des fils 
 ```

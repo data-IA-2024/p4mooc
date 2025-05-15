@@ -1,0 +1,28 @@
+<html>
+<header>
+    <style>
+        table, th, td {
+          border: 1px solid black;
+          border-collapse: collapse;
+        }
+    </style>
+</header>
+  <body>
+  <h3>Poser une question</h3>
+  <form method="POST">
+      question: <input type="text" name="question" value="{{question}}"/><br/>
+      course:<select name="course"><option>toutes</option>{%for id in courses%}<option {%if id == course %}selected{%endif%}>{{id}}</option>{%endfor%}</select><br/>
+      <input type="submit" value="Submit">
+  </form>
+
+  {%if answer%}
+  <h2>Réponse</h2>
+  <table>
+      <tr><th>dist</th><th>course_id</th><th>body</th></tr>
+      {%for res in answer%}
+      <tr><td>{{res.d}}</td><td>{{res.cid}}</td><td>{{res.body}}</td></tr>
+      {%endfor%}
+  </table>
+  {%endif%}
+  </body>
+</html>

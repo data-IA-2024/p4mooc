@@ -170,15 +170,6 @@ Thread
 %% Example of sequence diagram
   sequenceDiagram
 
-    box lightyellow Je pose une question
-        actor User
-        participant API
-        participant Modele
-        participant MongoDB
-        participant PGvector
-        participant Embedding
-    end
-
     User->>API : fil similaire (question, course_id) <br>GET /question?q=ma question&course=course
     API->>+Modele : Appel modèle <br>question(question, course)
     Modele->>Embedding : embedding (question)<br>Ollama POST http://localhost:11434/api/embed

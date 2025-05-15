@@ -1,6 +1,6 @@
 requests
 python-dotenv
-mistralai
+#mistralai
 
 psycopg2-binary
 
@@ -16,3 +16,4 @@ pymongo
 pyjwt
 passlib[bcrypt]
 pydantic
+#sentence-transformers

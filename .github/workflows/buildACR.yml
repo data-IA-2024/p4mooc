@@ -16,6 +16,7 @@ jobs:
           registry: p4acr
           repository: p4acr.azurecr.io
           image: p4moocp4
+          tag: latest
           #git_access_token: ${{ secrets.git_access_token }}
           folder: .
           dockerfile: ./Dockerfile

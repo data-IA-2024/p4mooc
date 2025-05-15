@@ -14,6 +14,31 @@ export en CSV
  clear; python3 importCSV.py
 ```
 
+## Docker
+Création de VM sur Azure
+```bash
+ docker network create -d bridge my-net
+ # Ollama
+ docker run -d -v ollama:/root/.ollama --network=my-net -p 11434:11434 --name ollama ollama/ollama
+
+ docker run --name pgvector -p 5432:5432 -e POSTGRES_PASSWORD=P4SECRET -d pgvector/pgvector:pg17
+ docker network connect my-net pgvector
+ docker network connect my-net mongop4
+ docker update --restart always pgvector
+ docker update --restart always mongop4
+ docker update --restart always ollama
+```
+
+```bash
+ docker login p4acr.azurecr.io 
+ docker build -t p4acr.azurecr.io/mooc_ego .
+ docker push p4acr.azurecr.io/mooc_ego
+ # sur VM
+ docker pull p4acr.azurecr.io/mooc_ego
+ docker run --name appli --network=my-net -p 8080:80 --env-file .env.ego -d p4acr.azurecr.io/mooc_ego
+ 
+```
+
 ## BDD PG vector
 ```bash
  docker run --name pgvector -p 5432:5432 -e POSTGRES_PASSWORD=P4SECRET -d pgvector/pgvector:pg17
@@ -106,15 +131,15 @@ Thread
 %% Example of sequence diagram
   sequenceDiagram
       actor User
-    User->>API : Charge le fil de discussion (id)<br>GET /thread?id=***
-    API->>+Modele : Extrait les messages du fil (id)<br>extract(id)
+    User->>API : Charge le fil de discussion (id)<br>GET /thread?id=***?course_id=***
+    API->>+Modele : Extrait les messages du fil (id)<br>extract(id, course_id)
     Modele->>MongoDB : récupère le document <br>db.threads.find({id:id})
     MongoDB->>Modele: document<br>JSON du fil
     loop chaque message du fil
     Modele->>MongoDB : Sauve message<br>db.messages.update_one({'id':id}, {'$set': content}, upsert=True)
     MongoDB->>Modele : status
-    Modele->>Ollama : embedding (messages)<br>POST http://localhost:11434/api/embed
-    Ollama->>Modele : result<br>Vector dans JSON
+    Modele->>Embedding : embedding (messages)<br>Ollama POST http://localhost:11434/api/embed
+    Embedding->>Modele : result<br>Vector dans JSON
     Modele->>PGvector : ajout (id,course_id,embedding) dans table<br>INSERT INTO public.documents ...
     PGvector->>Modele : status
     end
@@ -131,8 +156,6 @@ Thread
         participant API
         participant Modele
         participant MongoDB
-        participant PGvector
-        participant Ollama
     end
 
     User->>API : Donne la liste des cours <br/>GET /courses
@@ -153,9 +176,17 @@ Thread
         participant Modele
         participant MongoDB
         participant PGvector
-        participant Ollama
+        participant Embedding
     end
 
-    User->>API : fil similaire (question, course_id) 
+    User->>API : fil similaire (question, course_id) <br>GET /question?q=ma question&course=course
+    API->>+Modele : Appel modèle <br>question(question, course)
+    Modele->>Embedding : embedding (question)<br>Ollama POST http://localhost:11434/api/embed
+    Embedding->>Modele : result<br>Vector dans JSON
+    Modele->>PGvector : liste des messages du cours les plus proches<br>SELECT * FROM public.documents ...
+    PGvector->>Modele : liste d'ID proches
+    Modele->>MongoDB : contenu des messages
+    MongoDB->>Modele : messages
+    Modele->>-API : Réponses
     API->>User : Liste des fils 
 ```

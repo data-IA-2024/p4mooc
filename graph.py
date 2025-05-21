@@ -1,12 +1,15 @@
 import strawberry, typing
 import jwt
 from fastapi import FastAPI, Depends
-from strawberry.fastapi import GraphQLRouter
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from strawberry.fastapi import GraphQLRouter, BaseContext
 from pymongo import MongoClient
 import dotenv, os
 from pydantic import BaseModel
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from typing import Annotated
+from functools import cached_property
 
 dotenv.load_dotenv()  # take environment variables
 
@@ -60,7 +63,7 @@ class Message:
     courseware_url: str = ''
     courseware_title: str = ''
     anonymous_to_peers: str = ''
-    children: str
+    children: str=''
     pinned: bool = False
     commentable_id: str
     abuse_flaggers: str
@@ -72,10 +75,10 @@ class Message:
     depth: int = -1
     parent_id: str = ''
 
-def get_data(token:str=Depends(oauth2_scheme)) -> dict:
+def get_data(token:str=Depends(oauth2_scheme)) -> str:
     print(f"get_data {token=}")
     payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-    return payload
+    return str(payload)
 
 
 def get_messages(course_id : str=None, username : str=None, id: str=None, limit:int=20):
@@ -92,7 +95,7 @@ class Query:
     messages: typing.List[Message] = strawberry.field(resolver=get_messages)
 
     @strawberry.field
-    def protected_hello2(self, data:dict = Depends(get_data)) -> str:
+    def protected_hello2(self, data:str = Depends(get_data)) -> str:
         return f"OK {data=}"
 
 @strawberry.type
@@ -103,13 +106,38 @@ class Mutation:
 
         return Message(title=title, username=username)
 
-schema = strawberry.Schema(query=Query, mutation=Mutation)
+class Context(BaseContext):
+    @cached_property
+    def user(self) -> str:
+        if not self.request:
+            return None
+
+        authorization = self.request.headers.get("Authorization", None)
+        return authorization
+        #return authorization_service.authorize(authorization)
 
 
-graphql_app = GraphQLRouter(schema)
+
+
+def get_context() -> Context:
+    context = Context()
+    print(f'CONTEXT {context=} {context.user}')
+    return context
+
+schema = strawberry.Schema(query=Query,
+                           mutation=Mutation
+                           )
+
+
+graphql_app = GraphQLRouter(schema, context_getter=get_context)
 
 app = FastAPI()
+app.mount("/static", StaticFiles(directory="static"), name="static")
 app.include_router(graphql_app, prefix="/graphql")
+
+@app.get('/')
+def get_root():
+    return RedirectResponse('/static/index.html')
 
 @app.get("/test")
 def test(data=Depends(get_data)):

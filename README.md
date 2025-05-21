@@ -17,11 +17,13 @@ export en CSV
 ## Docker
 Création de VM sur Azure
 ```bash
+ # création de network
  docker network create -d bridge my-net
  # Ollama
  docker run -d -v ollama:/root/.ollama --network=my-net -p 11434:11434 --name ollama ollama/ollama
-
+ # PGvector
  docker run --name pgvector -p 5432:5432 -e POSTGRES_PASSWORD=P4SECRET -d pgvector/pgvector:pg17
+ # Ajout des services -> my-network & redémarrage auto
  docker network connect my-net pgvector
  docker network connect my-net mongop4
  docker update --restart always pgvector
@@ -29,16 +31,21 @@ Création de VM sur Azure
  docker update --restart always ollama
 ```
 
+Déployer manuellement :
 ```bash
- docker login p4acr.azurecr.io 
+ # En local sur ma machine
+ docker login p4acr.azurecr.io # A faire 1 seule fois
  docker build -t p4acr.azurecr.io/mooc_ego .
  docker push p4acr.azurecr.io/mooc_ego
- # sur VM
+ # sur la VM Azure (connection SSH)
  docker pull p4acr.azurecr.io/mooc_ego
- docker run --name appli --network=my-net -p 8080:80 --env-file .env.ego -d p4acr.azurecr.io/mooc_ego
- 
+ docker run --name appli --network=my-net -p 8080:80 --env-file .env.ego -d p4acr.azurecr.io/mooc_ego 
 ```
 
+Déployer automatiquement (build dans ACR)  
+Utilisation de workflow : https://github.com/Azure/acr-build  
+Voir .github/workflows/buildACR.yml  
+3 secrets ont été mis dans github
 ## BDD PG vector
 ```bash
  docker run --name pgvector -p 5432:5432 -e POSTGRES_PASSWORD=P4SECRET -d pgvector/pgvector:pg17
@@ -46,7 +53,24 @@ Création de VM sur Azure
 
 ## API
 ```bash
- fastapi dev main.py --port 8888
+ fastapi dev graph.py --port 8888
+```
+```mermaid
+%% Example of sequence diagram
+  sequenceDiagram
+      actor User
+
+    User->>API : requète initiale<br>GET /
+    API->>User : redirection vers /static/index.html
+    User->>API : requète /static/index.html<br>GET /static/index.html
+    API->>User : page index.html
+    API->>User : page index.html, lecture HTML & affichage
+    User->>google : requète lib jquery<br>GET jquery.min.js
+    google->>User : requète lib jquery<br>GET jquery.min.js
+    User->>API : requète données avec jquery<br>POST /graphql "messages {id body}"
+    API->>MongoDB : requère messages, champs id, body
+    MongoDB->>API : liste des messages
+    API->>User : données JSON messsages
 ```
 
 ```bash
@@ -55,7 +79,7 @@ Création de VM sur Azure
 ```
 
 ```bash
- python3 main.py
+ python3 graph.py
 ```
 
 ```bash

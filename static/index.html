@@ -1,0 +1,25 @@
+<html>
+<head>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+</head>
+<body>
+    <h1>OK</h1>
+    <div id="result"></div>
+<script>
+    $.ajax({
+  type: "POST",
+  url: "/graphql",
+  data: JSON.stringify({"query":"{messages {id body}}"}),
+  contentType: 'application/json',
+
+  success: (data)=>{
+    console.log(data.data.messages)
+    data.data.messages.forEach(x=>{
+      $('#result').append(`<div><b>${x.id}</b> : ${x.body}</div>`)
+    })
+    //$('#result').text(JSON.stringify(data));
+    },
+});
+</script>
+</body>
+</html>

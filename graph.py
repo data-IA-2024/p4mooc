@@ -13,31 +13,37 @@ from functools import cached_property
 
 dotenv.load_dotenv()  # take environment variables
 
-SECRET_KEY = os.environ['SECRET_KEY']
-ALGORITHM = os.environ['ALGORITHM']
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ['ACCESS_TOKEN_EXPIRE_MINUTES'])
-
-scopes = {
-    "read": "Read access to protected resources",
-    "write": "Write access to protected resources",
-    "fail": "Scope qui n'existe pas !"
-}
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", scopes=scopes)
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-
 MONGO_URL=os.environ['MONGO_URL']
 client = MongoClient(MONGO_URL)
 db = client[os.environ["MONGO_DB"]]
-#collection = db[os.environ["MONGO_COLLEC"]]
+
+@strawberry.input
+class CourseInput:
+    name: str=''
+    title: str=''
+    organisation: str=''
 
 @strawberry.type
-class User:
+class Course(CourseInput):
     _id: str
-    username: str='---'
-    user_id: int=0
+
+@strawberry.input
+class OrganisationInput:
+    name: str='---'
+
+def get_courses_from_orga(root):
+    return [Course(**doc) for doc in db['courses'].find({'organisation': root.name})]
+
+@strawberry.type
+class Organisation(OrganisationInput):
+    _id: str
+    courses : typing.List[Course] = strawberry.field(resolver=get_courses_from_orga)
+
+@strawberry.input
+class MessageInput:
+    title: str = strawberry.field(description="The title of the message")
+    username: str
+    body: str
 
 @strawberry.type
 class Message:
@@ -45,41 +51,56 @@ class Message:
     id: str
     username: str='---'
     user_id: int=-1
-    body: str
-    type: str
+    body: str = ''
+    type: str = ''
     thread_type: str = ''
     comments_count: int = 0
     context: str = ''
-    endorsed: int
+    endorsed: int = ''
     thread_id: str = ''
     title: str = ''
     unread_comments_count: int = 0
-    votes: str
-    anonymous: bool
-    created_at: str
-    updated_at: str
+    votes: str = ''
+    anonymous: bool = ''
+    created_at: str = ''
+    updated_at: str = ''
     resp_skip: int = 0
-    course_id: str
+    course_id: str = ''
     courseware_url: str = ''
     courseware_title: str = ''
     anonymous_to_peers: str = ''
     children: str=''
     pinned: bool = False
-    commentable_id: str
-    abuse_flaggers: str
-    closed: bool
+    commentable_id: str = ''
+    abuse_flaggers: str = ''
+    closed: bool = ''
     resp_total: int = 0
     resp_limit: int = 0
-    at_position_list: int
+    at_position_list: int = ''
     read: str = ''
     depth: int = -1
     parent_id: str = ''
 
-def get_data(token:str=Depends(oauth2_scheme)) -> str:
-    print(f"get_data {token=}")
-    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-    return str(payload)
+def get_message_from_user(root):
+    print(f"get_message_from_user {root} : ")
+    cursor=db['documents'].find({'user_id':str(root.user_id)}) #.limit(limit)
+    return [Message(**doc) for doc in cursor]
 
+@strawberry.input
+class UserInput:
+    user_id: int
+    username: str
+
+@strawberry.type
+class User(UserInput):
+    _id: str=''
+    messages : typing.List[Message] = strawberry.field(resolver=get_message_from_user)
+
+def get_orgas():
+    query={}
+    cursor=db['organisations'].find(query)
+    print(f"get_orgas, {query=}")
+    return [Organisation(**doc) for doc in cursor]
 
 def get_messages(course_id : str=None, username : str=None, id: str=None, limit:int=20):
     query={}
@@ -90,46 +111,47 @@ def get_messages(course_id : str=None, username : str=None, id: str=None, limit:
     cursor=db['documents'].find(query).limit(limit)
     return [Message(**doc) for doc in cursor]
 
+def get_users(limit:int=20):
+    query={}
+    print(f"get_users, {query=}")
+    cursor=db['users'].find(query).limit(limit)
+    return [User(**doc) for doc in cursor]
+
+def add_message(msg: MessageInput)->Message:
+    print(f"Adding {msg}")
+    return Message(id=0, _id='', title=msg.title, username=msg.username, body=msg.body)
+
+def add_orga(orga: OrganisationInput)->Organisation:
+    id = db['organisations'].insert_one({'name': orga.name}).inserted_id
+    return Organisation(**db['organisations'].find_one({'_id': id}))
+
+def add_course(course: CourseInput)->Course:
+    id = db['courses'].insert_one({'name': course.name, 'organisation': course.organisation}).inserted_id
+    return Course(**db['courses'].find_one({'_id': id}))
+
+def add_user(user: UserInput) -> User:
+    print(f"add_user {user}")
+    user2=User(user_id=user.user_id, username=user.username)
+    db['users'].insert_one({'user_id': user.user_id, 'username': user.username})
+    return user2
+
 @strawberry.type
 class Query:
+    orgas: typing.List[Organisation] = strawberry.field(resolver=get_orgas)
     messages: typing.List[Message] = strawberry.field(resolver=get_messages)
-
-    @strawberry.field
-    def protected_hello2(self, data:str = Depends(get_data)) -> str:
-        return f"OK {data=}"
+    users: typing.List[User] = strawberry.field(resolver=get_users)
 
 @strawberry.type
 class Mutation:
-    @strawberry.mutation
-    def add_message(self, title: str, username: str) -> Message:
-        print(f"Adding {title=} {username=}")
-
-        return Message(title=title, username=username)
-
-class Context(BaseContext):
-    @cached_property
-    def user(self) -> str:
-        if not self.request:
-            return None
-
-        authorization = self.request.headers.get("Authorization", None)
-        return authorization
-        #return authorization_service.authorize(authorization)
-
-
-
-
-def get_context() -> Context:
-    context = Context()
-    print(f'CONTEXT {context=} {context.user}')
-    return context
+    add_message: Message = strawberry.field(resolver=add_message)
+    add_user: User = strawberry.field(resolver=add_user)
+    add_orga: Organisation = strawberry.field(resolver=add_orga)
+    add_course: Course = strawberry.field(resolver=add_course)
 
 schema = strawberry.Schema(query=Query,
                            mutation=Mutation
                            )
-
-
-graphql_app = GraphQLRouter(schema, context_getter=get_context)
+graphql_app = GraphQLRouter(schema)
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -138,26 +160,3 @@ app.include_router(graphql_app, prefix="/graphql")
 @app.get('/')
 def get_root():
     return RedirectResponse('/static/index.html')
-
-@app.get("/test")
-def test(data=Depends(get_data)):
-    '''
-    Test du token identifié !
-    :param token:
-    :return:
-    '''
-    return data
-
-@app.post("/token")
-def login_for_access_token(
-        form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
-) -> Token:
-    '''
-    Valide l'authentification !
-    :param form_data:
-    :return:
-    '''
-    print(f"/token {form_data.username=} {form_data.password=} {form_data.scopes=}")
-    data = {'username': form_data.username, "scope": form_data.scopes}
-    access_token = jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
-    return Token(access_token=access_token, token_type="bearer")

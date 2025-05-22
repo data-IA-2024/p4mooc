@@ -19,46 +19,46 @@ db = client[os.environ["MONGO_DB"]]
 
 @strawberry.input
 class CourseInput:
-    name: str=''
-    title: str=''
-    organisation: str=''
+    name: typing.Optional[str]=None
+    title: typing.Optional[str]=None
+    organisation: typing.Optional[str]=None
 
 @strawberry.type
 class Course(CourseInput):
+    __collection__:strawberry.Private[str]='courses'
     _id: str
 
 @strawberry.input
 class OrganisationInput:
-    name: str='---'
+    name: typing.Optional[str]=None
 
 def get_courses_from_orga(root):
     return [Course(**doc) for doc in db['courses'].find({'organisation': root.name})]
 
 @strawberry.type
 class Organisation(OrganisationInput):
+    __collection__:strawberry.Private[str]='organisations'
     _id: str
     courses : typing.List[Course] = strawberry.field(resolver=get_courses_from_orga)
 
 @strawberry.input
 class MessageInput:
     title: str = strawberry.field(description="The title of the message")
-    username: str
-    body: str
+    username: typing.Optional[str]=None
+    body: typing.Optional[str]=None
 
 @strawberry.type
-class Message:
+class Message(MessageInput):
+    __collection__:strawberry.Private[str]='documents'
     _id: str
     id: str
-    username: str='---'
     user_id: int=-1
-    body: str = ''
     type: str = ''
     thread_type: str = ''
     comments_count: int = 0
     context: str = ''
     endorsed: int = ''
     thread_id: str = ''
-    title: str = ''
     unread_comments_count: int = 0
     votes: str = ''
     anonymous: bool = ''
@@ -88,19 +88,14 @@ def get_message_from_user(root):
 
 @strawberry.input
 class UserInput:
-    user_id: int
-    username: str
+    user_id: typing.Optional[int]=None
+    username: typing.Optional[str]=None
 
 @strawberry.type
 class User(UserInput):
+    __collection__:strawberry.Private[str]='users'
     _id: str=''
     messages : typing.List[Message] = strawberry.field(resolver=get_message_from_user)
-
-def get_orgas():
-    query={}
-    cursor=db['organisations'].find(query)
-    print(f"get_orgas, {query=}")
-    return [Organisation(**doc) for doc in cursor]
 
 def get_messages(course_id : str=None, username : str=None, id: str=None, limit:int=20):
     query={}
@@ -111,42 +106,37 @@ def get_messages(course_id : str=None, username : str=None, id: str=None, limit:
     cursor=db['documents'].find(query).limit(limit)
     return [Message(**doc) for doc in cursor]
 
-def get_users(limit:int=20):
-    query={}
-    print(f"get_users, {query=}")
-    cursor=db['users'].find(query).limit(limit)
-    return [User(**doc) for doc in cursor]
+def create_add(clo, collection):
+    print(f"create_add {clo} {clo.__bases__} {clo.__collection__}")
+    cli=clo.__bases__[0] # class parent
+    def add_obj(doc:cli)->clo:
+        id = db[collection].insert_one(doc.__dict__).inserted_id
+        return clo(**db[collection].find_one({'_id': id}))
+    return add_obj
 
-def add_message(msg: MessageInput)->Message:
-    print(f"Adding {msg}")
-    return Message(id=0, _id='', title=msg.title, username=msg.username, body=msg.body)
-
-def add_orga(orga: OrganisationInput)->Organisation:
-    id = db['organisations'].insert_one({'name': orga.name}).inserted_id
-    return Organisation(**db['organisations'].find_one({'_id': id}))
-
-def add_course(course: CourseInput)->Course:
-    id = db['courses'].insert_one({'name': course.name, 'organisation': course.organisation}).inserted_id
-    return Course(**db['courses'].find_one({'_id': id}))
-
-def add_user(user: UserInput) -> User:
-    print(f"add_user {user}")
-    user2=User(user_id=user.user_id, username=user.username)
-    db['users'].insert_one({'user_id': user.user_id, 'username': user.username})
-    return user2
+def create_get(clo):
+    cli=clo.__bases__[0] # class parent
+    print(f"create_get {clo} {clo.__bases__} {clo.__collection__=}")
+    def get_list(filter:cli)->typing.List[clo]:
+        query = {key: value for key, value in filter.__dict__.items() if value is not None}
+        print(f"get_list, {clo.__collection__=} {query}")
+        cursor=db[clo.__collection__].find(query)
+        return [clo(**doc) for doc in cursor]
+    return get_list
 
 @strawberry.type
 class Query:
-    orgas: typing.List[Organisation] = strawberry.field(resolver=get_orgas)
-    messages: typing.List[Message] = strawberry.field(resolver=get_messages)
-    users: typing.List[User] = strawberry.field(resolver=get_users)
+    orgas: typing.List[Organisation] = strawberry.field(resolver=create_get(Organisation))
+    messages: typing.List[Message] = strawberry.field(resolver=create_get(Message))
+    users: typing.List[User] = strawberry.field(resolver=create_get(User))
+    courses: typing.List[Course] = strawberry.field(resolver=create_get(Course))
 
 @strawberry.type
 class Mutation:
-    add_message: Message = strawberry.field(resolver=add_message)
-    add_user: User = strawberry.field(resolver=add_user)
-    add_orga: Organisation = strawberry.field(resolver=add_orga)
-    add_course: Course = strawberry.field(resolver=add_course)
+    add_message: Message = strawberry.field(resolver=create_add(Message, 'messages'))
+    add_user: User = strawberry.field(resolver=create_add(User, 'users'))
+    add_orga: Organisation = strawberry.field(resolver=create_add(Organisation, 'organisations'))
+    add_course: Course = strawberry.field(resolver=create_add(Course, 'courses'))
 
 schema = strawberry.Schema(query=Query,
                            mutation=Mutation
